@@ -52,8 +52,11 @@ git clone https://github.com/zxrubx/holst.git /root/holst && cd /root/holst
 sudo bash deploy/install.sh doska.example.ru
 ```
 
-Скрипт установит Node.js 20 и Caddy (HTTPS-сертификат Let's Encrypt получит сам),
-создаст systemd-сервис `lesson-board` и ежедневный бэкап.
+Скрипт установит Node.js 20 и Caddy (если их нет), создаст systemd-сервис `lesson-board`
+(порт `127.0.0.1:3480`, задаётся через `PORT=...`) и ежедневный бэкап.
+Для Caddy он кладёт **только** файл `/etc/caddy/conf.d/lesson-board.caddy` — основной `Caddyfile`
+и другие сайты не трогаются (нужна строка `import conf.d/*.caddy` в `Caddyfile`). Перед перезагрузкой
+Caddy конфиг проверяется, при ошибке файл откатывается.
 
 3. Откройте `https://doska.example.ru` и зарегистрируйтесь. **Первый** зарегистрированный аккаунт
    становится владельцем, после этого регистрация автоматически закрывается.

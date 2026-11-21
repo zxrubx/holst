@@ -28,6 +28,9 @@ if ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
   apt-get update -y
   apt-get install -y caddy
+  # свежая установка: сайты держим отдельными файлами в conf.d/
+  mkdir -p /etc/caddy/conf.d
+  printf '# Каждый сайт — отдельный файл в conf.d/\nimport conf.d/*.caddy\n' > /etc/caddy/Caddyfile
 fi
 
 echo "==> Проверка порта $PORT"
@@ -80,16 +83,21 @@ systemctl daemon-reload
 systemctl enable --now lesson-board
 systemctl restart lesson-board
 
-echo "==> Caddyfile (добавляем блок доски, остальные сайты не трогаем)"
+echo "==> Caddy: сайт доски — отдельный файл conf.d/lesson-board.caddy (Caddyfile не трогаем)"
 CF=/etc/caddy/Caddyfile
-touch "$CF"; cp "$CF" "$CF.bak.$(date +%s)"
-# убираем старый блок доски (если ставили раньше) и дописываем новый
-sed -i '/^# >>> lesson-board$/,/^# <<< lesson-board$/d' "$CF"
-# старая версия скрипта целиком перезаписывала файл одним блоком этого домена
-if grep -q "^$DOMAIN {" "$CF" && [ "$(grep -c '{$' "$CF")" -le 3 ] && grep -q 'reverse_proxy 127.0.0.1:3000' "$CF"; then : > "$CF"; fi
-cat >> "$CF" <<CADDY
-
-# >>> lesson-board
+SITE=/etc/caddy/conf.d/lesson-board.caddy
+mkdir -p /etc/caddy/conf.d
+if ! grep -qE '^\s*import\s+conf\.d/\*\.caddy' "$CF" 2>/dev/null; then
+  echo "В $CF нет строки 'import conf.d/*.caddy'."
+  echo "Добавьте её в начало файла вручную и запустите скрипт ещё раз. Caddyfile не изменён."
+  exit 1
+fi
+if grep -lsE "^[^#]*\b$DOMAIN\b" /etc/caddy/conf.d/*.caddy "$CF" | grep -vx "$SITE" | grep -q .; then
+  echo "Домен $DOMAIN уже описан в другом файле:"; grep -lsE "^[^#]*\b$DOMAIN\b" /etc/caddy/conf.d/*.caddy "$CF" | grep -vx "$SITE"
+  echo "Уберите его оттуда и запустите скрипт ещё раз."; exit 1
+fi
+OLD=""; [ -f "$SITE" ] && OLD="$(cat "$SITE")"
+cat > "$SITE" <<CADDY
 $DOMAIN {
 	encode zstd gzip
 	request_body {
@@ -97,11 +105,14 @@ $DOMAIN {
 	}
 	reverse_proxy 127.0.0.1:$PORT
 }
-# <<< lesson-board
 CADDY
-caddy validate --config "$CF" --adapter caddyfile
-systemctl enable caddy
-systemctl reload caddy || systemctl restart caddy
+if ! caddy validate --config "$CF" --adapter caddyfile >/dev/null 2>&1; then
+  echo "Конфиг Caddy не прошёл проверку — откатываю $SITE:"
+  caddy validate --config "$CF" --adapter caddyfile || true
+  if [ -n "$OLD" ]; then printf '%s\n' "$OLD" > "$SITE"; else rm -f "$SITE"; fi
+  exit 1
+fi
+systemctl reload caddy
 
 echo "==> Firewall"
 if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
