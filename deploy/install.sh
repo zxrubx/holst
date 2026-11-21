@@ -10,6 +10,7 @@ if [ "$(id -u)" -ne 0 ]; then echo "Запустите через sudo / от ro
 APP_DIR=/opt/lesson-board
 DATA_DIR=/var/lib/lesson-board
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
+PORT="${PORT:-3480}"
 
 echo "==> Пакеты"
 apt-get update -y
@@ -27,6 +28,13 @@ if ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
   apt-get update -y
   apt-get install -y caddy
+fi
+
+echo "==> Проверка порта $PORT"
+systemctl stop lesson-board 2>/dev/null || true
+if ss -ltn "( sport = :$PORT )" | grep -q LISTEN; then
+  echo "ОШИБКА: порт $PORT уже занят другой программой:"; ss -ltnp "( sport = :$PORT )"
+  echo "Запустите с другим портом:  sudo PORT=3590 bash deploy/install.sh $DOMAIN"; exit 1
 fi
 
 echo "==> Приложение -> $APP_DIR"
@@ -53,7 +61,7 @@ ExecStart=/usr/bin/node $APP_DIR/server.js
 Restart=always
 RestartSec=2
 Environment=NODE_ENV=production
-Environment=PORT=3000
+Environment=PORT=$PORT
 Environment=HOST=127.0.0.1
 Environment=DATA_DIR=$DATA_DIR
 Environment=SECURE_COOKIE=1
@@ -80,7 +88,7 @@ $DOMAIN {
 	request_body {
 		max_size 110MB
 	}
-	reverse_proxy 127.0.0.1:3000
+	reverse_proxy 127.0.0.1:$PORT
 }
 CADDY
 systemctl enable caddy
@@ -100,6 +108,10 @@ find /var/backups/lesson-board -name 'board-*.tar.gz' -mtime +14 -delete
 BK
 chmod +x /etc/cron.daily/lesson-board-backup
 
+sleep 1
+if ! curl -fs "http://127.0.0.1:$PORT/api/config" | grep -q appName; then
+  echo "ОШИБКА: приложение не отвечает. Лог:"; journalctl -u lesson-board -n 30 --no-pager; exit 1
+fi
 echo
 echo "Готово! Откройте https://$DOMAIN и зарегистрируйтесь — первый зарегистрированный"
 echo "пользователь станет владельцем, после этого регистрация закроется."
