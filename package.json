@@ -1,0 +1,10 @@
+{
+  "name": "lesson-board",
+  "version": "1.0.0",
+  "description": "Лёгкая интерактивная доска для уроков иностранных языков",
+  "main": "server.js",
+  "private": true,
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}
