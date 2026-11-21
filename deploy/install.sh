@@ -80,9 +80,16 @@ systemctl daemon-reload
 systemctl enable --now lesson-board
 systemctl restart lesson-board
 
-echo "==> Caddyfile"
-[ -f /etc/caddy/Caddyfile ] && cp /etc/caddy/Caddyfile "/etc/caddy/Caddyfile.bak.$(date +%s)"
-cat > /etc/caddy/Caddyfile <<CADDY
+echo "==> Caddyfile (добавляем блок доски, остальные сайты не трогаем)"
+CF=/etc/caddy/Caddyfile
+touch "$CF"; cp "$CF" "$CF.bak.$(date +%s)"
+# убираем старый блок доски (если ставили раньше) и дописываем новый
+sed -i '/^# >>> lesson-board$/,/^# <<< lesson-board$/d' "$CF"
+# старая версия скрипта целиком перезаписывала файл одним блоком этого домена
+if grep -q "^$DOMAIN {" "$CF" && [ "$(grep -c '{$' "$CF")" -le 3 ] && grep -q 'reverse_proxy 127.0.0.1:3000' "$CF"; then : > "$CF"; fi
+cat >> "$CF" <<CADDY
+
+# >>> lesson-board
 $DOMAIN {
 	encode zstd gzip
 	request_body {
@@ -90,7 +97,9 @@ $DOMAIN {
 	}
 	reverse_proxy 127.0.0.1:$PORT
 }
+# <<< lesson-board
 CADDY
+caddy validate --config "$CF" --adapter caddyfile
 systemctl enable caddy
 systemctl reload caddy || systemctl restart caddy
 
