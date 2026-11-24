@@ -785,8 +785,10 @@
     let hs = '';
     if (one && canTouch(one) && !editing) {
       if (WIDTH_ONLY.has(one.type)) hs = 'e w';
+      else if (one.type === 'frame') hs = 'n s e w nw ne sw se';
       else hs = 'nw ne sw se';
     }
+    selbox.classList.toggle('fr', !!one && one.type === 'frame');
     if (selbox._hs !== hs) { selbox._hs = hs; selbox.innerHTML = hs ? hs.split(' ').map(h => `<div class="hd ${h}" data-h="${h}"></div>`).join('') : ''; }
     renderCtx(a.x, a.y, b.w * view.z);
   }
@@ -1612,7 +1614,7 @@
       setTool(id);
     };
     // top left
-    const back = isOwner() ? `<a class="ibtn" href="/" title="Мои доски">${icon('left')}</a>` : '';
+    const back = `<a class="ibtn" href="/" title="На главный экран" aria-label="На главный экран" style="flex-shrink:0">${icon('left')}</a>`;
     $('#topleft').innerHTML = `${back}<div id="title" ${isOwner() ? 'contenteditable="true" spellcheck="false"' : ''}>${esc(title)}</div>`;
     document.title = title;
     const tEl = $('#title');
